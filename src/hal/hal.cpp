@@ -224,6 +224,9 @@ static void hal_time_init () {
 }
 
 u4_t hal_ticks () {
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    return (tv.tv_sec * 1000000LL + tv.tv_usec) >> US_PER_OSTICK_EXPONENT;
     // Because micros() is scaled down in this function, micros() will
     // overflow before the tick timer should, causing the tick timer to
     // miss a significant part of its values if not corrected. To fix
