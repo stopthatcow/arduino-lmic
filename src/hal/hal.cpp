@@ -16,6 +16,8 @@
 #include "../lmic.h"
 // include the C++ hal.h
 #include "hal.h"
+#include "mgos.h"  // TODO(nwiles): Remove this in favor of using the os layer.
+#include "mgos_gpio.h"  // TODO(nwiles): Remove this in favor of using the os layer.
 // we may need some things from stdio.
 #include <stdio.h>
 
@@ -26,6 +28,7 @@ static const Arduino_LMIC::HalPinmap_t *plmic_pins;
 static Arduino_LMIC::HalConfiguration_t *pHalConfig;
 static Arduino_LMIC::HalConfiguration_t nullHalConig;
 static hal_failure_handler_t* custom_hal_failure_handler = NULL;
+static int64_t hal_timer_offset_micros = 0;
 
 static void hal_interrupt_init(); // Fwd declaration
 
@@ -86,7 +89,7 @@ s1_t hal_getRssiCal (void) {
 //--------------------
 static constexpr unsigned NUM_DIO_INTERRUPT = 3;
 static_assert(NUM_DIO_INTERRUPT <= NUM_DIO, "Number of interrupt-sensitive lines must be less than number of GPIOs");
-static ostime_t interrupt_time[NUM_DIO_INTERRUPT] = {0};
+static int64_t interrupt_time[NUM_DIO_INTERRUPT] = {0};  // In micros using esp_timer_get_time().
 
 #if !defined(LMIC_USE_INTERRUPTS)
 static void hal_interrupt_init() {
@@ -116,29 +119,23 @@ void hal_pollPendingIRQs_helper() {
 }
 
 #else
+
+static void hal_isr_userspace_handler(void *arg){
+    const int isr_idx = reinterpret_cast<int>(arg);
+    const ostime_t iTime = interrupt_time[isr_idx];
+    interrupt_time[isr_idx] = 0;
+    radio_irq_handler_v2(isr_idx, iTime);
+}
+
 // Interrupt handlers
-
-static void hal_isrPin0() {
-    if (interrupt_time[0] == 0) {
-        ostime_t now = os_getTime();
-        interrupt_time[0] = now ? now : 1;
-    }
-}
-static void hal_isrPin1() {
-    if (interrupt_time[1] == 0) {
-        ostime_t now = os_getTime();
-        interrupt_time[1] = now ? now : 1;
-    }
-}
-static void hal_isrPin2() {
-    if (interrupt_time[2] == 0) {
-        ostime_t now = os_getTime();
-        interrupt_time[2] = now ? now : 1;
-    }
+static IRAM void hal_isr_handler(int pin, void *arg) {
+    const int isr_idx = reinterpret_cast<int>(arg);
+    if (interrupt_time[isr_idx] != 0) return;
+    const ostime_t now = os_getTime();
+    interrupt_time[isr_idx] = (now != 0) ? now : 1;
+    mgos_invoke_cb(hal_isr_userspace_handler, arg, /*from_isr=*/true);
 }
 
-typedef void (*isr_t)();
-static const isr_t interrupt_fns[NUM_DIO_INTERRUPT] = {hal_isrPin0, hal_isrPin1, hal_isrPin2};
 static_assert(NUM_DIO_INTERRUPT == 3, "number of interrupts must be 3 for initializing interrupt_fns[]");
 
 static void hal_interrupt_init() {
@@ -147,7 +144,9 @@ static void hal_interrupt_init() {
           continue;
 
       pinMode(plmic_pins->dio[i], INPUT);
-      attachInterrupt(digitalPinToInterrupt(plmic_pins->dio[i]), interrupt_fns[i], RISING);
+      mgos_gpio_set_int_handler_isr(plmic_pins->dio[i], MGOS_GPIO_INT_EDGE_POS,
+                                    hal_isr_handler, reinterpret_cast<void *>(i));
+      // TODO(nwiles): Detach interrupt on LMIC reset?
   }
 }
 #endif // LMIC_USE_INTERRUPTS
@@ -170,7 +169,7 @@ void hal_processPendingIRQs() {
         // use case, as the radio won't release IRQs until we
         // explicitly clear them.
         iTime = interrupt_time[i];
-        if (iTime) {
+        if (iTime != 0) {
             interrupt_time[i] = 0;
             radio_irq_handler_v2(i, iTime);
         }
@@ -220,55 +219,19 @@ void hal_spi_read(u1_t cmd, u1_t* buf, size_t len) {
 // TIME
 
 static void hal_time_init () {
-    // Nothing to do
+    // We need to fetch absolute time in ISR context where gettimeofday() doesn't work.
+    // Instead use mgos_uptime_micros() and calculate the offset between these timers here.
+    hal_disableIRQs();
+    const int64_t uptime_micros = mgos_uptime_micros();
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    const int64_t wall_micros = (tv.tv_sec * 1000000LL + tv.tv_usec);
+    hal_timer_offset_micros = wall_micros - uptime_micros;
+    hal_enableIRQs();
 }
 
 u4_t hal_ticks () {
-    struct timeval tv;
-    gettimeofday(&tv, nullptr);
-    return (tv.tv_sec * 1000000LL + tv.tv_usec) >> US_PER_OSTICK_EXPONENT;
-    // Because micros() is scaled down in this function, micros() will
-    // overflow before the tick timer should, causing the tick timer to
-    // miss a significant part of its values if not corrected. To fix
-    // this, the "overflow" serves as an overflow area for the micros()
-    // counter. It consists of three parts:
-    //  - The US_PER_OSTICK upper bits are effectively an extension for
-    //    the micros() counter and are added to the result of this
-    //    function.
-    //  - The next bit overlaps with the most significant bit of
-    //    micros(). This is used to detect micros() overflows.
-    //  - The remaining bits are always zero.
-    //
-    // By comparing the overlapping bit with the corresponding bit in
-    // the micros() return value, overflows can be detected and the
-    // upper bits are incremented. This is done using some clever
-    // bitwise operations, to remove the need for comparisons and a
-    // jumps, which should result in efficient code. By avoiding shifts
-    // other than by multiples of 8 as much as possible, this is also
-    // efficient on AVR (which only has 1-bit shifts).
-    static uint8_t overflow = 0;
-
-    // Scaled down timestamp. The top US_PER_OSTICK_EXPONENT bits are 0,
-    // the others will be the lower bits of our return value.
-    uint32_t scaled = micros() >> US_PER_OSTICK_EXPONENT;
-    // Most significant byte of scaled
-    uint8_t msb = scaled >> 24;
-    // Mask pointing to the overlapping bit in msb and overflow.
-    const uint8_t mask = (1 << (7 - US_PER_OSTICK_EXPONENT));
-    // Update overflow. If the overlapping bit is different
-    // between overflow and msb, it is added to the stored value,
-    // so the overlapping bit becomes equal again and, if it changed
-    // from 1 to 0, the upper bits are incremented.
-    overflow += (msb ^ overflow) & mask;
-
-    // Return the scaled value with the upper bits of stored added. The
-    // overlapping bit will be equal and the lower bits will be 0, so
-    // bitwise or is a no-op for them.
-    return scaled | ((uint32_t)overflow << 24);
-
-    // 0 leads to correct, but overly complex code (it could just return
-    // micros() unmodified), 8 leaves no room for the overlapping bit.
-    static_assert(US_PER_OSTICK_EXPONENT > 0 && US_PER_OSTICK_EXPONENT < 8, "Invalid US_PER_OSTICK_EXPONENT value");
+    return (mgos_uptime_micros() + hal_timer_offset_micros) >> US_PER_OSTICK_EXPONENT;
 }
 
 // Returns the number of ticks until time. Negative values indicate that

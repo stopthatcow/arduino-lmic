@@ -165,17 +165,16 @@ typedef void (osjobcbfn_t)(struct osjob_t*);
 typedef osjobcbfn_t *osjobcb_t;
 
 struct osjob_t {
-    struct osjob_t* next;
-    ostime_t deadline;
     osjobcb_t  func;
+    void *timer;
 };
 TYPEDEF_xref2osjob_t;
 
 //! determine whether a job is timed or immediate. os_setTimedCallback()
 // must treat incoming == 0 as being 1 instead.
-static inline int os_jobIsTimed(xref2osjob_t job) {
-    return (job->deadline != 0);
-}
+// static inline int os_jobIsTimed(xref2osjob_t job) {
+//     return (job->deadline != 0);
+// }
 
 #ifndef HAS_os_calls
 
