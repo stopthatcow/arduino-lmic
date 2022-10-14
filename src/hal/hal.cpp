@@ -14,6 +14,7 @@
 #include <SPI.h>
 // include all the lmic header files, including ../lmic/hal.h
 #include "../lmic.h"
+#include "esp_timer.h"
 // include the C++ hal.h
 #include "hal.h"
 #include "mgos.h"  // TODO(nwiles): Remove this in favor of using the os layer.
@@ -89,7 +90,7 @@ s1_t hal_getRssiCal (void) {
 //--------------------
 static constexpr unsigned NUM_DIO_INTERRUPT = 3;
 static_assert(NUM_DIO_INTERRUPT <= NUM_DIO, "Number of interrupt-sensitive lines must be less than number of GPIOs");
-static int64_t interrupt_time[NUM_DIO_INTERRUPT] = {0};  // In micros using esp_timer_get_time().
+static volatile int64_t interrupt_time[NUM_DIO_INTERRUPT] = {0};  // In micros using esp_timer_get_time().
 
 #if !defined(LMIC_USE_INTERRUPTS)
 static void hal_interrupt_init() {
@@ -144,8 +145,9 @@ static void hal_interrupt_init() {
           continue;
 
       pinMode(plmic_pins->dio[i], INPUT);
-      mgos_gpio_set_int_handler_isr(plmic_pins->dio[i], MGOS_GPIO_INT_EDGE_POS,
-                                    hal_isr_handler, reinterpret_cast<void *>(i));
+      mgos_gpio_set_int_handler(plmic_pins->dio[i], MGOS_GPIO_INT_EDGE_POS,
+                                hal_isr_handler, reinterpret_cast<void *>(i));
+      mgos_gpio_enable_int(plmic_pins->dio[i]);
       // TODO(nwiles): Detach interrupt on LMIC reset?
   }
 }
@@ -220,9 +222,9 @@ void hal_spi_read(u1_t cmd, u1_t* buf, size_t len) {
 
 static void hal_time_init () {
     // We need to fetch absolute time in ISR context where gettimeofday() doesn't work.
-    // Instead use mgos_uptime_micros() and calculate the offset between these timers here.
+    // Instead use esp_timer_get_time() and calculate the offset between these timers here.
     hal_disableIRQs();
-    const int64_t uptime_micros = mgos_uptime_micros();
+    const int64_t uptime_micros = esp_timer_get_time();
     struct timeval tv;
     gettimeofday(&tv, nullptr);
     const int64_t wall_micros = (tv.tv_sec * 1000000LL + tv.tv_usec);
@@ -231,7 +233,7 @@ static void hal_time_init () {
 }
 
 u4_t hal_ticks () {
-    return (mgos_uptime_micros() + hal_timer_offset_micros) >> US_PER_OSTICK_EXPONENT;
+    return (esp_timer_get_time() + hal_timer_offset_micros) >> US_PER_OSTICK_EXPONENT;
 }
 
 // Returns the number of ticks until time. Negative values indicate that

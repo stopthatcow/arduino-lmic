@@ -55,10 +55,11 @@ ostime_t os_getTime () {
 // clear scheduled job
 void os_clearCallback (osjob_t* job) {
     mgos_clear_timer((mgos_timer_id)(job->timer));
+    job->timer = MGOS_INVALID_TIMER_ID;
 }
 
 static void os_run_job(void *arg){
-    osjob_t* job = (osjob_t*)arg;
+    osjob_t* job = (osjob_t*)arg; 
     job->func(job);
 }
 
@@ -71,14 +72,9 @@ void os_setCallback (osjob_t* job, osjobcb_t cb) {
 
 // schedule timed job
 void os_setTimedCallback (osjob_t* job, ostime_t time, osjobcb_t cb) {
-    const int relative_ticks = time - hal_ticks();
-    const int relative_ms = osticks2ms(relative_ticks > 0 ? relative_ticks : 0);
     mgos_clear_timer((mgos_timer_id)(job->timer));
+    const ostime_t relative_ticks = time - hal_ticks();
+    const int relative_ms = osticks2ms(relative_ticks > 0 ? relative_ticks : 0);
     job->func = cb;
     job->timer = (void *)mgos_set_timer(relative_ms, /*flags=*/0, os_run_job, job);
 }
-
-// void os_runloop_once() {
-//     hal_processPendingIRQs();
-//     hal_pollPendingIRQs_helper();
-// }
