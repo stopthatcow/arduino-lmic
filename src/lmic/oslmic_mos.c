@@ -60,6 +60,7 @@ void os_clearCallback (osjob_t* job) {
 
 static void os_run_job(void *arg){
     osjob_t* job = (osjob_t*)arg; 
+    job->timer = MGOS_INVALID_TIMER_ID;
     job->func(job);
 }
 
