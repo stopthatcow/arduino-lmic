@@ -34,11 +34,17 @@ static int64_t hal_timer_offset_micros = 0;
 static void hal_interrupt_init(); // Fwd declaration
 
 static void hal_io_init () {
-    // NSS and DIO0 are required, DIO1 is required for LoRa, DIO2 for FSK
+    // NSS required.
+    // SX127x: DIO0 required, DIO1 is required for LoRa, DIO2 for FSK
+    // SX126x: DIO0, DIO1 required.
     ASSERT(plmic_pins->nss != LMIC_UNUSED_PIN);
+#if defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+    ASSERT(plmic_pins->dio[0] != LMIC_UNUSED_PIN);
+    ASSERT(plmic_pins->dio[1] != LMIC_UNUSED_PIN);
+#elif defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio)
     ASSERT(plmic_pins->dio[0] != LMIC_UNUSED_PIN);
     ASSERT(plmic_pins->dio[1] != LMIC_UNUSED_PIN || plmic_pins->dio[2] != LMIC_UNUSED_PIN);
-
+#endif
 //    Serial.print("nss: "); Serial.println(plmic_pins->nss);
 //    Serial.print("rst: "); Serial.println(plmic_pins->rst);
 //    Serial.print("dio[0]: "); Serial.println(plmic_pins->dio[0]);
@@ -57,6 +63,9 @@ static void hal_io_init () {
     if (plmic_pins->rst != LMIC_UNUSED_PIN) {
         // initialize RST to floating
         pinMode(plmic_pins->rst, INPUT);
+    }
+    if(plmic_pins->busy != LMIC_UNUSED_PIN) {
+        pinMode(plmic_pins->busy, INPUT);
     }
 
     hal_interrupt_init();
@@ -84,6 +93,60 @@ void hal_pin_rst (u1_t val) {
 s1_t hal_getRssiCal (void) {
     return plmic_pins->rssi_cal;
 }
+
+void hal_irqmask_set (int mask) {
+    if(plmic_pins->dio[0] != LMIC_UNUSED_PIN){
+        if(mask & HAL_IRQMASK_DIO0)
+            mgos_gpio_enable_int(plmic_pins->dio[0]);
+        else
+            mgos_gpio_disable_int(plmic_pins->dio[0]);
+    }
+    if(plmic_pins->dio[1] != LMIC_UNUSED_PIN){
+        if(mask & HAL_IRQMASK_DIO1)
+            mgos_gpio_enable_int(plmic_pins->dio[1]);
+        else
+            mgos_gpio_disable_int(plmic_pins->dio[1]);
+    }
+    if(plmic_pins->dio[2] != LMIC_UNUSED_PIN){
+        if(mask & HAL_IRQMASK_DIO2)
+            mgos_gpio_enable_int(plmic_pins->dio[2]);
+        else
+            mgos_gpio_disable_int(plmic_pins->dio[2]);
+    }
+}
+
+#if defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+// Datasheet defines typical times until busy goes low. Most are < 200us,
+// except when waking up from sleep, which typically takes 3500us. Since
+// we cannot know here if we are in sleep, we'll have to assume we are.
+// Since 3500 is typical, not maximum, wait a bit more than that.
+static int MAX_BUSY_TIME = 5000;
+
+void hal_pin_busy_wait (void) {
+    if (plmic_pins->busy == LMIC_UNUSED_PIN) {
+        // TODO: We could probably keep some state so we know the chip
+        // is in sleep, since otherwise the delay can be much shorter.
+        // Also, all delays after commands (rather than waking up from
+        // sleep) are measured from the *end* of the previous SPI
+        // transaction, so we could wait shorter if we remember when
+        // that was.
+        delayMicroseconds(MAX_BUSY_TIME);
+    } else {
+        unsigned long start = micros();
+        while((micros() - start) < MAX_BUSY_TIME && digitalRead(plmic_pins->busy)) /* wait */;
+    }
+}
+
+// TODO(nwiles): Make this configurable if needed.
+bool hal_dio3_controls_tcxo (void) {
+    return false;
+}
+// TODO(nwiles): Make this configurable if needed.
+bool hal_dio2_controls_rxtx (void) {
+    return true;
+}
+#endif // defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+
 
 //--------------------
 // Interrupt handling
@@ -147,7 +210,7 @@ static void hal_interrupt_init() {
       pinMode(plmic_pins->dio[i], INPUT);
       mgos_gpio_set_int_handler(plmic_pins->dio[i], MGOS_GPIO_INT_EDGE_POS,
                                 hal_isr_handler, reinterpret_cast<void *>(i));
-      mgos_gpio_enable_int(plmic_pins->dio[i]);
+      // Intentionally not enabled yet.
       // TODO(nwiles): Detach interrupt on LMIC reset?
   }
 }
@@ -185,36 +248,18 @@ static void hal_spi_init () {
     SPI.begin();
 }
 
-static void hal_spi_trx(u1_t cmd, u1_t* buf, size_t len, bit_t is_read) {
-    uint32_t spi_freq;
-    u1_t nss = plmic_pins->nss;
+void hal_spi_select (int on) {
+    if (on)
+        SPI.beginTransaction(SPISettings((plmic_pins->spi_freq == 0? LMIC_SPI_FREQ : plmic_pins->spi_freq), MSBFIRST, SPI_MODE0));
+    else
+        SPI.endTransaction();
 
-    if ((spi_freq = plmic_pins->spi_freq) == 0)
-        spi_freq = LMIC_SPI_FREQ;
-
-    SPISettings settings(spi_freq, MSBFIRST, SPI_MODE0);
-    SPI.beginTransaction(settings);
-    digitalWrite(nss, 0);
-
-    SPI.transfer(cmd);
-
-    for (; len > 0; --len, ++buf) {
-        u1_t data = is_read ? 0x00 : *buf;
-        data = SPI.transfer(data);
-        if (is_read)
-            *buf = data;
-    }
-
-    digitalWrite(nss, 1);
-    SPI.endTransaction();
+    digitalWrite(plmic_pins->nss, !on);
 }
 
-void hal_spi_write(u1_t cmd, const u1_t* buf, size_t len) {
-    hal_spi_trx(cmd, (u1_t*)buf, len, 0);
-}
-
-void hal_spi_read(u1_t cmd, u1_t* buf, size_t len) {
-    hal_spi_trx(cmd, buf, len, 1);
+// perform SPI transaction with radio
+u1_t hal_spi (u1_t out) {
+    return SPI.transfer(out);
 }
 
 // -----------------------------------------------------------------------------
@@ -463,7 +508,8 @@ ostime_t hal_setModuleActive (bit_t val) {
     return pHalConfig->setModuleActive(val);
 }
 
-bit_t hal_queryUsingTcxo(void) {
+bit_t hal_pin_tcxo(bit_t enable) {
+    // TODO(nwiles): This doesn't control TCXO, only returns if we use it.
     return pHalConfig->queryUsingTcxo();
 }
 

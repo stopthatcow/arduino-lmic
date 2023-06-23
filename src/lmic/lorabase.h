@@ -639,6 +639,8 @@ static inline int   getNocrc(rps_t params)            { return        ((params >
 static inline rps_t setNocrc(rps_t params, int nocrc) { return (rps_t)((params & ~0x80) | (nocrc<<7)); }
 static inline int   getIh   (rps_t params)            { return        ((params >> 8) & 0xFF); }
 static inline rps_t setIh   (rps_t params, int ih)    { return (rps_t)((params & ~0xFF00) | (ih<<8)); }
+static inline sf_t  isLora  (rps_t params)            { return   getSf(params) >= SF7 && getSf(params) <= SF12; }
+static inline sf_t  isFsk   (rps_t params)            { return   getSf(params) == FSK; }
 static inline rps_t makeRps (sf_t sf, bw_t bw, cr_t cr, int ih, int nocrc) {
     return sf | (bw<<3) | (cr<<5) | (nocrc?(1<<7):0) | ((ih&0xFF)<<8);
 }
@@ -647,6 +649,10 @@ static inline rps_t makeRps (sf_t sf, bw_t bw, cr_t cr, int ih, int nocrc) {
 static inline int sameSfBw(rps_t r1, rps_t r2) { return ((r1^r2)&0x1F) == 0; }
 static inline int isFasterDR (dr_t dr1, dr_t dr2) { return dr1 > dr2; }
 static inline int isSlowerDR (dr_t dr1, dr_t dr2) { return dr1 < dr2; }
+
+// return 1 for low data rate optimize should be enabled (symbol time equal or above 16.384 ms) else 0
+// Must be enabled for: SF11/BW125, SF12/BW125, SF12/BW250
+static inline int enDro (rps_t params) { return (int)getSf(params) - getBw(params) >= SF11; }
 
 //
 // BEG: Keep in sync with lorabase.hpp

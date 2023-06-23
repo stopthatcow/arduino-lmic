@@ -50,7 +50,7 @@
 //#define CFG_sx1276_radio 1
 
 // ensure that a radio is defined.
-#if ! (defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio))
+#if ! (defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio) || defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio))
 # warning Target radio not defined, assuming CFG_sx1276_radio
 #define CFG_sx1276_radio 1
 #elif defined(CFG_sx1272_radio) && defined(CFG_sx1276_radio)

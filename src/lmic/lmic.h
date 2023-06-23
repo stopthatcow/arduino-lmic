@@ -250,7 +250,8 @@ struct bcninfo_t {
 #endif // !DISABLE_BEACONS
 
 // purpose of receive window - lmic_t.rxState
-enum { RADIO_RST=0, RADIO_TX=1, RADIO_RX=2, RADIO_RXON=3, RADIO_TX_AT=4, };
+enum { RADIO_RST=0, RADIO_TX=1, RADIO_RX=2, RADIO_RXON=3, RADIO_TXCW, RADIO_CCA, RADIO_INIT, RADIO_CAD, RADIO_TXCONT };
+
 // Netid values /  lmic_t.netid
 enum { NETID_NONE=(int)~0U, NETID_MASK=(int)0xFFFFFF };
 // MAC operation modes (lmic_t.opmode).

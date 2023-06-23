@@ -47,6 +47,7 @@
 LMIC_BEGIN_DECLS
 
 
+#include <stdbool.h>
 #include <string.h>
 #include "hal.h"
 #define EV(a,b,c) /**/
@@ -107,15 +108,29 @@ struct oslmic_radio_rssi_s {
         u2_t    n_rssi;
 };
 
-int radio_init (void);
-void radio_irq_handler (u1_t dio);
+// public radio functions
+void radio_irq_handler (u1_t dio); // (used by EXTI_IRQHandler)
 void radio_irq_handler_v2 (u1_t dio, ostime_t tref);
+int radio_init (bool calibrate); // (used by os_init())
+void radio_rand_init(void);  // Init random seed buffer from radio.
+void radio_writeBuf (u1_t addr, u1_t* buf, u1_t len); // (used by perso)
+void radio_readBuf (u1_t addr, u1_t* buf, u1_t len); // (used by perso)
+void radio_set_irq_timeout (ostime_t timeout);
+
+// radio-specific functions
+bool radio_irq_process (ostime_t irqtime, u1_t diomask);
+void radio_starttx (bool txcontinuous);
+void radio_startrx (bool rxcontinuous);
+void radio_sleep (void);
+void radio_cca (void);
+void radio_cad (void);
+void radio_cw (void);
+void radio_generate_random (u1_t *buffer, u1_t len);  // Used by radio_rand_init().
+
 void os_init (void);
 int os_init_ex (const void *pPinMap);
 void os_runloop (void);
 void os_runloop_once (void);
-u1_t radio_rssi (void);
-void radio_monitor_rssi(ostime_t n, oslmic_radio_rssi_t *pRssi);
 
 //================================================================================
 

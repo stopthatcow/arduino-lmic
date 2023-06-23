@@ -51,19 +51,25 @@ struct HalPinmap_t {
 	static constexpr uint8_t LMIC_UNUSED_PIN = UNUSED_PIN;
 
 	/* the contents */
-	uint8_t nss;		// byte 0: pin for select
-	uint8_t rxtx;		// byte 1: pin for rx/tx control
-	uint8_t rst;		// byte 2: pin for reset
-	uint8_t dio[NUM_DIO];	// bytes 3..5: pins for DIO0, DOI1, DIO2
-	// true if we must set rxtx for rx_active, false for tx_active
-	uint8_t rxtx_rx_active;	// byte 6: polarity of rxtx active
-	int8_t rssi_cal;	// byte 7: cal in dB -- added to RSSI
-				//   measured prior to decision.
-				//   Must include noise guardband!
-	uint32_t spi_freq;	// bytes 8..11: SPI freq in Hz.
+	uint8_t nss = LMIC_UNUSED_PIN;   // Pin for select.
+	uint8_t rxtx = LMIC_UNUSED_PIN;	 // Pin for rx/tx control.
+	uint8_t rst = LMIC_UNUSED_PIN;   // Pin for reset.
+	// Pins for DIO0, DOI1, DIO2.
+	uint8_t dio[NUM_DIO] = {LMIC_UNUSED_PIN,
+							LMIC_UNUSED_PIN,
+							LMIC_UNUSED_PIN};
+	uint8_t busy = LMIC_UNUSED_PIN;  // For SX126x only (BUSY / DIO4).
+	// True if we must set rxtx for rx_active, false for tx_active
+	bool rxtx_rx_active = false;  // Polarity of rxtx active
+	int8_t rssi_cal=0;	// RSSI cal in dB -- added to RSSI
+				        //   measured prior to decision.
+				        //   Must include noise guardband!
+    bool dio2_controls_rxtx = true;   // True if DIO2 controls rx/tx.
+    bool dio3_controls_txco = false;  // True if DIO3 powers TXCO (SX126x only)..
+	uint32_t spi_freq = 0;  // SPI freq in Hz.
 
-	// optional pointer to configuration object (bytes 12..15)
-	HalConfiguration_t *pConfig;
+	// optional pointer to configuration object
+	HalConfiguration_t *pConfig = nullptr;
 	};
 
 class HalConfiguration_t

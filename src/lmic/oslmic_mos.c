@@ -36,8 +36,9 @@ extern const struct lmic_pinmap lmic_pins;
 
 int os_init_ex (const void *pintable) {
     hal_init_ex(pintable);
-    if (! radio_init())
+    if (! radio_init(false))
         return 0;
+    radio_rand_init();
     LMIC_init();
     return 1;
 }

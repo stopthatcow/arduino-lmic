@@ -69,18 +69,37 @@ void hal_pin_rxtx (u1_t val);
 void hal_pin_rst (u1_t val);
 
 /*
- * Perform SPI write transaction with radio chip
- *   - write the command byte 'cmd'
- *   - write 'len' bytes out of 'buf'
+ * set DIO0/1/2/3 interrupt mask
  */
-void hal_spi_write(u1_t cmd, const u1_t* buf, size_t len);
+#define HAL_IRQMASK_DIO0 (1<<0)
+#define HAL_IRQMASK_DIO1 (1<<1)
+#define HAL_IRQMASK_DIO2 (1<<2)
+#define HAL_IRQMASK_DIO3 (1<<3)
+void hal_irqmask_set (int mask);
+
+#if defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+/*
+ * SX126x only, wait until busy line is LOW.
+ */
+void hal_pin_busy_wait (void);
+
+bool hal_dio3_controls_tcxo (void);
+
+bool hal_dio2_controls_rxtx (void);
+
+#endif // defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
 
 /*
- * Perform SPI read transaction with radio chip
- *   - write the command byte 'cmd'
- *   - read 'len' bytes into 'buf'
+ * drive radio NSS pin (on=low, off=high).
  */
-void hal_spi_read(u1_t cmd, u1_t* buf, size_t len);
+void hal_spi_select (int on);
+
+/*
+ * perform 8-bit SPI transaction with radio.
+ *   - write given byte 'outval'
+ *   - read byte and return value
+ */
+u1_t hal_spi (u1_t outval);
 
 /*
  * disable all CPU interrupts.
@@ -149,7 +168,7 @@ s1_t hal_getRssiCal (void);
 ostime_t hal_setModuleActive (bit_t val);
 
 /* find out if we're using Tcxo */
-bit_t hal_queryUsingTcxo(void);
+bit_t hal_pin_tcxo(bit_t enable);
 
 /* represent the various radio TX power policy */
 enum	{
