@@ -16,10 +16,11 @@ Author:
 #pragma once
 
 #ifndef _arduino_lmic_hal_configuration_h_
-# define _arduino_lmic_hal_configuration_h_
+#define _arduino_lmic_hal_configuration_h_
 
 #include <stdint.h>
 #include "lmic/lmic_env.h"
+#include "lmic/hal.h"
 
 namespace Arduino_LMIC {
 
@@ -51,6 +52,7 @@ struct HalPinmap_t {
 	static constexpr uint8_t LMIC_UNUSED_PIN = UNUSED_PIN;
 
 	/* the contents */
+	hal_radio_type_t radio_type;
 	uint8_t nss = LMIC_UNUSED_PIN;   // Pin for select.
 	uint8_t rxtx = LMIC_UNUSED_PIN;	 // Pin for rx/tx control.
 	uint8_t rst = LMIC_UNUSED_PIN;   // Pin for reset.

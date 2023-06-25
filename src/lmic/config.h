@@ -50,11 +50,9 @@
 //#define CFG_sx1276_radio 1
 
 // ensure that a radio is defined.
-#if ! (defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio) || defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio))
-# warning Target radio not defined, assuming CFG_sx1276_radio
-#define CFG_sx1276_radio 1
-#elif defined(CFG_sx1272_radio) && defined(CFG_sx1276_radio)
-# error You can define at most one of CFG_sx1272_radio and CF_sx1276_radio
+#if ! (defined(CFG_sx127x_radio) || defined(CFG_sx126x_radio))
+# warning Target radio not defined, assuming CFG_sx127x_radio
+#define CFG_sx127x_radio 1
 #endif
 
 // LMIC requires ticks to be 15.5μs - 100 μs long

@@ -6,8 +6,8 @@
 
 #include "lmic.h"
 
-#if defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio)
-
+#if defined(CFG_sx127x_radio)
+#define CFG_sx1276_radio  // TODO(nwiles) Support SX1272, it doesn't currently compile.
 // ----------------------------------------
 // Registers Mapping
 #define RegFifo                                    0x00 // common
@@ -372,7 +372,7 @@ static u1_t readReg (u1_t addr) {
 }
 
 // (used by perso)
-void radio_writeBuf (u1_t addr, u1_t* buf, u1_t len) {
+void sx127x_writeBuf (u1_t addr, u1_t* buf, u1_t len) {
     hal_spi_select(1);
     hal_spi(addr | 0x80);
     for (u1_t i = 0; i < len; i++) {
@@ -382,7 +382,7 @@ void radio_writeBuf (u1_t addr, u1_t* buf, u1_t len) {
 }
 
 // (used by  perso)
-void radio_readBuf (u1_t addr, u1_t* buf, u1_t len) {
+void sx127x_readBuf (u1_t addr, u1_t* buf, u1_t len) {
     hal_spi_select(1);
     hal_spi(addr & 0x7F);
     for (u1_t i = 0; i < len; i++) {
@@ -391,7 +391,7 @@ void radio_readBuf (u1_t addr, u1_t* buf, u1_t len) {
     hal_spi_select(0);
 }
 
-void radio_sleep (void) {
+void sx127x_sleep (void) {
     writeReg(RegOpMode, OPMODE_LORA_SLEEP); // LoRa/FSK bit is ignored when not in SLEEP mode
 }
 
@@ -412,7 +412,7 @@ static void setopmode (u1_t opmode) {
 static void LoadFifo (void) {
     if (state.fifolen > 0) {
         int n = (state.fifolen > FIFOTHRESH) ? FIFOTHRESH : state.fifolen;
-        radio_writeBuf(RegFifo, state.fifoptr, n);
+        sx127x_writeBuf(RegFifo, state.fifoptr, n);
         state.fifoptr += n;
         state.fifolen -= n;
     }
@@ -422,11 +422,11 @@ static void LoadFifo (void) {
 static void UnloadFifo (void) {
     if (state.fifolen < 0) { // first byte
         state.fifolen = 0;
-        radio_readBuf(RegFifo, &LMIC.dataLen, 1);
+        sx127x_readBuf(RegFifo, &LMIC.dataLen, 1);
     }
     int n = (LMIC.dataLen - state.fifolen > (FIFOTHRESH-1)) ? (FIFOTHRESH-1) : (LMIC.dataLen - state.fifolen); // errata: unload one byte less
     if (n) {
-        radio_readBuf(RegFifo, state.fifoptr, n);
+        sx127x_readBuf(RegFifo, state.fifoptr, n);
         state.fifoptr += n;
         state.fifolen += n;
     }
@@ -674,7 +674,7 @@ static void power_tcxo (void) {
 }
 
 // continuous wave
-void radio_cw (void) {
+void sx127x_cw (void) {
     // select FSK modem (from sleep mode)
     setopmode(OPMODE_FSK_SLEEP);
 
@@ -816,7 +816,7 @@ static void txlora (bool txcontinuous) {
     writeReg(LORARegPayloadLength, LMIC.dataLen);
 
     // download buffer to the radio FIFO
-    radio_writeBuf(RegFifo, LMIC.frame, LMIC.dataLen);
+    sx127x_writeBuf(RegFifo, LMIC.frame, LMIC.dataLen);
 
     // enable antenna switch for TX
     //hal_ant_switch(BRD_TXANTSWSEL(LMIC.freq, pw));
@@ -1070,7 +1070,7 @@ static void rxfsk (bool rxcontinuous) {
     hal_enableIRQs();
 }
 
-void radio_startrx (bool rxcontinuous) {
+void sx127x_startrx (bool rxcontinuous) {
     ASSERT( (readReg(RegOpMode) & OPMODE_MASK) == OPMODE_SLEEP );
 
     if (isFsk(LMIC.rps)) { // FSK modem
@@ -1084,13 +1084,13 @@ void radio_startrx (bool rxcontinuous) {
     }
 }
 
-void radio_cad (void) {
+void sx127x_cad (void) {
     ASSERT( (readReg(RegOpMode) & OPMODE_MASK) == OPMODE_SLEEP );
 
     rxloracad();
 }
 
-void radio_starttx (bool txcontinuous) {
+void sx127x_starttx (bool txcontinuous) {
     ASSERT( (readReg(RegOpMode) & OPMODE_MASK) == OPMODE_SLEEP );
     if (isFsk(LMIC.rps)) { // FSK modem
         txfsk(txcontinuous);
@@ -1100,7 +1100,7 @@ void radio_starttx (bool txcontinuous) {
 }
 
 // LMIC.rssi = max_rssi(threshold=LMIC.rssi, duration=LMIC.rxtime, freq=LMIC.freq, bw=LMIC.rps)
-void radio_cca (void) {
+void sx127x_cca (void) {
     // select FSK modem (from sleep mode)
     ASSERT( (readReg(RegOpMode) & OPMODE_MASK) == OPMODE_SLEEP );
     setopmode(OPMODE_FSK_SLEEP);
@@ -1155,7 +1155,7 @@ void radio_cca (void) {
 }
 
 // reset radio
-static void radio_reset (void) {
+static void sx127x_reset (void) {
     // drive RST pin
     hal_pin_rst(RST_PIN_RESET_STATE);
 
@@ -1175,14 +1175,14 @@ static void radio_reset (void) {
     ASSERT( readReg(RegOpMode) == OPMODE_FSK_STANDBY );
 }
 
-int radio_init (bool calibrate) {
+int sx127x_init (bool calibrate) {
     hal_disableIRQs();
 
     // power-up tcxo
     power_tcxo();
 
     // reset radio (FSK/STANDBY)
-    radio_reset();
+    sx127x_reset();
 
     // sanity check, read version number
     if( readReg(RegVersion) != RADIO_VERSION ) {
@@ -1212,7 +1212,7 @@ int radio_init (bool calibrate) {
     return 1;
 }
 
-void radio_generate_random (u1_t *buffer, u1_t len){
+void sx127x_generate_random (u1_t *buffer, u1_t len){
     // select LoRa modem (from sleep mode)
     setopmode(OPMODE_LORA_SLEEP);
 
@@ -1245,7 +1245,7 @@ void radio_generate_random (u1_t *buffer, u1_t len){
 
 
 // (run by irqjob)
-bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
+bool sx127x_irq_process (ostime_t irqtime, u1_t diomask) {
     (void)diomask; //unused
 
     // dispatch modem
@@ -1349,7 +1349,7 @@ bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
             writeReg(LORARegFifoAddrPtr, readReg(LORARegFifoRxCurrentAddr));
 
             // read FIFO
-            radio_readBuf(RegFifo, LMIC.frame, LMIC.dataLen);
+            sx127x_readBuf(RegFifo, LMIC.frame, LMIC.dataLen);
 #ifdef DEBUG_RX
             LMIC_DEBUG_PRINTF("RX[rssi=%d,snr=%.2F,len=%d]: %.80h\r\n",
                          LMIC.rssi - RSSI_OFF, (s4_t)(LMIC.snr * 100 / SNR_SCALEUP), 2,
@@ -1386,6 +1386,21 @@ bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
 
     // radio operation completed
     return true;
+}
+
+static const oslmic_radio_interface_t sx127x_radio = {
+    sx127x_init,
+    sx127x_irq_process,
+    sx127x_starttx,
+    sx127x_startrx,
+    sx127x_sleep,
+    sx127x_cca,
+    sx127x_cad,
+    sx127x_cw,
+    sx127x_generate_random
+};
+const oslmic_radio_interface_t *sx127x_interface(){
+    return &sx127x_radio;
 }
 
 #endif

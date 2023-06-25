@@ -7,7 +7,7 @@
 #include "lmic.h"
 #include "hal.h"
 
-#if defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+#if defined(CFG_sx126x_radio)
 
 // ----------------------------------------
 // Commands Selecting the Operating Modes of the Radio
@@ -469,19 +469,20 @@ static void SetDioIrqParams (uint16_t mask) {
 
 // set tx power (in dBm)
 static void SetTxPower (int pw) {
-#if defined(CFG_sx1261_radio)
-    // low power PA: -17 ... +14 dBm
-    if (pw > 14) pw = 14;
-    if (pw < -17) pw = -17;
-    // set PA config (and reset OCP to 60mA)
-    writecmd(CMD_SETPACONFIG, (const uint8_t[]) { 0x04, 0x00, 0x01, 0x01 }, 4);
-#elif defined(CFG_sx1262_radio)
-    // high power PA: -9 ... +22 dBm
-    if (pw > 22) pw = 22;
-    if (pw < -9) pw = -9;
-    // set PA config (and reset OCP to 140mA)
-    writecmd(CMD_SETPACONFIG, (const uint8_t[]) { 0x04, 0x07, 0x00, 0x01 }, 4);
-#endif
+    const hal_radio_type_t radio_type = hal_radio_type();
+    if(radio_type == LMIC_RADIO_SX1261){
+        // low power PA: -17 ... +14 dBm
+        if (pw > 14) pw = 14;
+        if (pw < -17) pw = -17;
+        // set PA config (and reset OCP to 60mA)
+        writecmd(CMD_SETPACONFIG, (const uint8_t[]) { 0x04, 0x00, 0x01, 0x01 }, 4);
+    }else if(radio_type == LMIC_RADIO_SX1262){
+        // high power PA: -9 ... +22 dBm
+        if (pw > 22) pw = 22;
+        if (pw < -9) pw = -9;
+        // set PA config (and reset OCP to 140mA)
+        writecmd(CMD_SETPACONFIG, (const uint8_t[]) { 0x04, 0x07, 0x00, 0x01 }, 4);
+    }
     // set tx params
     uint8_t txparam[2];
     txparam[0] = (uint8_t) pw;
@@ -520,7 +521,7 @@ static void SetCrc16 (uint16_t seed, uint16_t polynomial) {
     WriteRegs(REG_CRCPOLYVALMSB, buf, 2);
 }
 
-void radio_sleep (void) {
+void sx126x_sleep (void) {
     // cache sleep state to avoid unneccessary wakeup (waking up from cold sleep takes about 4ms)
     if (state.sleeping == 0) {
         SetSleep(SLEEP_COLD);
@@ -603,7 +604,7 @@ static void txfsk (void) {
     SetTx(64000); // timeout 1s (should not happen, TXDONE irq will be raised)
 }
 
-void radio_cw (void) {
+void sx126x_cw (void) {
     CommonSetup();
     SetStandby(STDBY_RC);
     SetRfFrequency(LMIC.freq);
@@ -617,7 +618,7 @@ void radio_cw (void) {
     SetTxContinuousWave();
 }
 
-void radio_starttx (bool txcontinuous) {
+void sx126x_starttx (bool txcontinuous) {
     if (txcontinuous) {
         // XXX: This is probably not right. In 2.2, Semtech changed the
         // 127x driver to rename txsw to radio_cw, but
@@ -731,16 +732,16 @@ static void rxlora (bool rxcontinuous) {
     hal_enableIRQs();
 }
 
-void radio_cca () {
+void sx126x_cca () {
     LMIC.rssi = -127; //XXX:TBD
 }
 
-void radio_cad (void) {
+void sx126x_cad (void) {
     // not yet...
     ASSERT(0);
 }
 
-void radio_startrx (bool rxcontinuous) {
+void sx126x_startrx (bool rxcontinuous) {
     if (isFsk(LMIC.rps)) { // FSK modem
         rxfsk(rxcontinuous);
     } else { // LoRa modem
@@ -749,7 +750,7 @@ void radio_startrx (bool rxcontinuous) {
 }
 
 // reset radio
-static void radio_reset (void) {
+static void sx126x_reset (void) {
     // drive RST pin low
     hal_pin_rst(0);
 
@@ -769,11 +770,11 @@ static void radio_reset (void) {
     state.sleeping = 0;
 }
 
-int radio_init (bool calibrate) {
+int sx126x_init (bool calibrate) {
     hal_disableIRQs();
 
     // reset radio (FSK/STANDBY)
-    radio_reset();
+    sx126x_reset();
 
     // check reset value
     if( ReadReg(REG_LORASYNCWORDLSB) != 0x24 ){
@@ -791,7 +792,7 @@ int radio_init (bool calibrate) {
     return 1;
 }
 
-void radio_generate_random (u1_t *buffer, u1_t len){
+void sx126x_generate_random (u1_t *buffer, u1_t len){
     while(len){
         const u1_t copy_len = (len < 4)? len : 4;
         const u4_t randword = GetRandom( );
@@ -802,7 +803,7 @@ void radio_generate_random (u1_t *buffer, u1_t len){
 }
 
 // (run by irqjob)
-bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
+bool sx126x_irq_process (ostime_t irqtime, u1_t diomask) {
     (void)diomask; // unused
 
     uint16_t irqflags = GetIrqStatus();
@@ -889,6 +890,21 @@ bool radio_irq_process (ostime_t irqtime, u1_t diomask) {
 
     // radio operation completed
     return true;
+}
+
+static const oslmic_radio_interface_t sx126x_radio = {
+    sx126x_init,
+    sx126x_irq_process,
+    sx126x_starttx,
+    sx126x_startrx,
+    sx126x_sleep,
+    sx126x_cca,
+    sx126x_cad,
+    sx126x_cw,
+    sx126x_generate_random
+};
+const oslmic_radio_interface_t *sx126x_interface(){
+    return &sx126x_radio;
 }
 
 #endif

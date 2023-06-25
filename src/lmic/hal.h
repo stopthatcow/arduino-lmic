@@ -44,6 +44,17 @@ extern "C"{
 // The type of an optional user-defined failure handler routine
 typedef void LMIC_ABI_STD hal_failure_handler_t(const char* const file, const uint16_t line);
 
+typedef enum {
+#if defined(CFG_sx126x_radio)
+  LMIC_RADIO_SX1261 = 1261,
+  LMIC_RADIO_SX1262 = 1262,
+#endif
+#if defined(CFG_sx127x_radio)
+  // LMIC_RADIO_SX1272 = 1272, // TODO(nwiles): Support this.
+  LMIC_RADIO_SX1276 = 1276,
+#endif
+} hal_radio_type_t;
+
 /*
  * initialize hardware (IO, SPI, TIMER, IRQ).
  * This API is deprecated as it uses the const global lmic_pins,
@@ -77,7 +88,9 @@ void hal_pin_rst (u1_t val);
 #define HAL_IRQMASK_DIO3 (1<<3)
 void hal_irqmask_set (int mask);
 
-#if defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+hal_radio_type_t hal_radio_type (void);
+
+#if defined(CFG_sx126x_radio)
 /*
  * SX126x only, wait until busy line is LOW.
  */
@@ -87,7 +100,7 @@ bool hal_dio3_controls_tcxo (void);
 
 bool hal_dio2_controls_rxtx (void);
 
-#endif // defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+#endif // defined(CFG_sx126x_radio)
 
 /*
  * drive radio NSS pin (on=low, off=high).

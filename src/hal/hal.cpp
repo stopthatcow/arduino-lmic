@@ -38,10 +38,10 @@ static void hal_io_init () {
     // SX127x: DIO0 required, DIO1 is required for LoRa, DIO2 for FSK
     // SX126x: DIO0, DIO1 required.
     ASSERT(plmic_pins->nss != LMIC_UNUSED_PIN);
-#if defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+#if defined(CFG_sx126x_radio)
     ASSERT(plmic_pins->dio[0] != LMIC_UNUSED_PIN);
     ASSERT(plmic_pins->dio[1] != LMIC_UNUSED_PIN);
-#elif defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio)
+#elif defined(CFG_sx127x_radio)
     ASSERT(plmic_pins->dio[0] != LMIC_UNUSED_PIN);
     ASSERT(plmic_pins->dio[1] != LMIC_UNUSED_PIN || plmic_pins->dio[2] != LMIC_UNUSED_PIN);
 #endif
@@ -115,7 +115,12 @@ void hal_irqmask_set (int mask) {
     }
 }
 
-#if defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+hal_radio_type_t hal_radio_type (void){
+    return plmic_pins->radio_type;
+}
+
+
+#if defined(CFG_sx126x_radio)
 // Datasheet defines typical times until busy goes low. Most are < 200us,
 // except when waking up from sleep, which typically takes 3500us. Since
 // we cannot know here if we are in sleep, we'll have to assume we are.
@@ -139,13 +144,13 @@ void hal_pin_busy_wait (void) {
 
 // TODO(nwiles): Make this configurable if needed.
 bool hal_dio3_controls_tcxo (void) {
-    return false;
+    return plmic_pins->dio3_controls_txco;
 }
 // TODO(nwiles): Make this configurable if needed.
 bool hal_dio2_controls_rxtx (void) {
-    return true;
+    return plmic_pins->dio2_controls_rxtx;
 }
-#endif // defined(CFG_sx1261_radio) || defined(CFG_sx1262_radio)
+#endif // defined(CFG_sx126x_radio)
 
 
 //--------------------

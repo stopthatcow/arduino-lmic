@@ -108,13 +108,28 @@ struct oslmic_radio_rssi_s {
         u2_t    n_rssi;
 };
 
+typedef struct oslmic_radio_interface_s oslmic_radio_interface_t;
+
+struct oslmic_radio_interface_s {
+  int (*init) (bool);
+  bool (*irq_process) (ostime_t irqtime, u1_t diomask);
+  void (*starttx) (bool);
+  void (*startrx) (bool);
+  void (*sleep) (void);
+  void (*cca) (void);
+  void (*cad) (void);
+  void (*cw) (void);
+  void (*generate_random) (u1_t *buffer, u1_t len);
+};
+
+const oslmic_radio_interface_t *sx126x_interface();
+const oslmic_radio_interface_t *sx127x_interface();
+
 // public radio functions
 void radio_irq_handler (u1_t dio); // (used by EXTI_IRQHandler)
 void radio_irq_handler_v2 (u1_t dio, ostime_t tref);
 int radio_init (bool calibrate); // (used by os_init())
 void radio_rand_init(void);  // Init random seed buffer from radio.
-void radio_writeBuf (u1_t addr, u1_t* buf, u1_t len); // (used by perso)
-void radio_readBuf (u1_t addr, u1_t* buf, u1_t len); // (used by perso)
 void radio_set_irq_timeout (ostime_t timeout);
 
 // radio-specific functions

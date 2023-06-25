@@ -25,10 +25,8 @@ static void radio_stop (void) {
     radio_sleep();
     // disable antenna switch
     hal_pin_rxtx(0);
-#if defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio)
     // power-down TCXO
     hal_pin_tcxo(0);
-#endif // defined(CFG_sx1272_radio) || defined(CFG_sx1276_radio)
     // disable antenna switch
     // disable IRQs in HAL
     hal_irqmask_set(0);
@@ -103,6 +101,61 @@ void radio_irq_handler_v2 (u1_t diomask, ostime_t ticks) {
     // schedule irq job
     // (timeout job will be replaced, intermediate interrupts must rewind timeout!)
     os_setCallback(&state.irqjob, radio_irq_func);
+}
+
+static const oslmic_radio_interface_t *s_radio = NULL;
+
+
+int radio_init (bool calibrate){
+    switch(hal_radio_type()){
+#if defined(CFG_sx126x_radio)
+        case LMIC_RADIO_SX1261:
+        case LMIC_RADIO_SX1262:
+            s_radio = sx126x_interface();
+            break;
+#endif
+
+#if defined(CFG_sx127x_radio)
+        case LMIC_RADIO_SX1276:
+            s_radio = sx127x_interface();
+            break;
+#endif
+        default:
+            ASSERT(0); // Invalid radio type.
+    }
+    return s_radio->init(calibrate);
+}
+
+bool radio_irq_process (ostime_t irqtime, u1_t diomask){
+    return s_radio->irq_process(irqtime, diomask);
+}
+
+void radio_starttx (bool txcontinuous){
+    s_radio->starttx(txcontinuous);
+}
+
+void radio_startrx (bool rxcontinuous){
+    s_radio->startrx(rxcontinuous);
+}
+
+void radio_sleep (void){
+    s_radio->sleep();
+}
+
+void radio_cca (void){
+    s_radio->cca();
+}
+
+void radio_cad (void){
+    s_radio->cad();
+}
+
+void radio_cw (void){
+    s_radio->cw();
+}
+
+void radio_generate_random (u1_t *buffer, u1_t len){
+    s_radio->generate_random(buffer, len);
 }
 
 void os_radio (u1_t mode) {
