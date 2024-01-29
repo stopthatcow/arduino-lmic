@@ -662,7 +662,7 @@ static void rxfsk (bool rxcontinuous) {
 
     ostime_t now = os_getTime();
     if (!rxcontinuous && LMIC.rxtime - now < 0) {
-        LMIC_DEBUG_PRINTF("WARNING: rxtime is %ld ticks in the past! (ramp-up time %ld ms / %ld ticks)\r\n",
+        LMIC_DEBUG_PRINTF("WARNING: rxtime is %d ticks in the past! (ramp-up time %d ms / %dd ticks)\r\n",
                      now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
     }
 
@@ -710,7 +710,7 @@ static void rxlora (bool rxcontinuous) {
     if (!rxcontinuous && LMIC.rxtime - now < 0) {
         // Print before disabling IRQs, to work around deadlock on some
         // Arduino cores that doe not really support printing without IRQs
-        LMIC_DEBUG_PRINTF("WARNING: rxtime is %ld ticks in the past! (ramp-up time %ld ms / %ld ticks)\r\n",
+        LMIC_DEBUG_PRINTF("WARNING: rxtime is %d ticks in the past! (ramp-up time %d ms / %d ticks)\r\n",
                      now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
     }
 
@@ -838,7 +838,7 @@ bool sx126x_irq_process (ostime_t irqtime, u1_t diomask) {
 #endif
         } else {
             // unexpected irq
-            LMIC_DEBUG_PRINTF("UNEXPECTED RADIO IRQ %04x (after %ld ticks, %.1Fms)\r\n", irqflags, irqtime - LMIC.rxtime, osticks2us(irqtime - LMIC.rxtime), 3);
+            LMIC_DEBUG_PRINTF("UNEXPECTED RADIO IRQ %04x (after %d ticks, %.1dms)\r\n", irqflags, irqtime - LMIC.rxtime, osticks2ms(irqtime - LMIC.rxtime));
             ASSERT(0);
         }
     } else { // LORA modem

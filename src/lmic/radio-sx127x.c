@@ -921,9 +921,9 @@ static void rxlorasingle (void) {
     // re-enable interrupts
     hal_enableIRQs();
     // warn about delayed rx
-    if( rxtime - now < 0 ) {
-        LMIC_DEBUG_PRINTF("WARNING: rxtime is %ld ticks in the past! (ramp-up time %ld ms / %ld ticks)\r\n",
-                     now - rxtime, osticks2ms(now - t0), now - t0);
+    if( LMIC.rxtime - now < 0 ) {
+        LMIC_DEBUG_PRINTF("WARNING: LMIC.rxtime is %d ticks in the past! (ramp-up time %d ms / %d ticks)\r\n",
+                     now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
     }
 }
 
@@ -1055,7 +1055,7 @@ static void rxfsk (bool rxcontinuous) {
         // busy wait until exact rx time
         ostime_t now = os_getTime();
         if (LMIC.rxtime - now < 0) {
-            LMIC_DEBUG_PRINTF("WARNING: rxtime is %ld ticks in the past! (ramp-up time %ld ms / %ld ticks)\r\n",
+            LMIC_DEBUG_PRINTF("WARNING: rxtime is %d ticks in the past! (ramp-up time %d ms / %d ticks)\r\n",
                          now - LMIC.rxtime, osticks2ms(now - t0), now - t0);
         }
         hal_waitUntil(LMIC.rxtime);
