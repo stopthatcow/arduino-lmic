@@ -75,8 +75,10 @@ void os_setCallback (osjob_t* job, osjobcb_t cb) {
 // schedule timed job
 void os_setTimedCallback (osjob_t* job, ostime_t time, osjobcb_t cb) {
     mgos_clear_timer((mgos_timer_id)(job->timer));
-    const ostime_t relative_ticks = time - hal_ticks();
+    hal_disableIRQs(); // Disable IRQ to ensure our time snapshots are coherent.
+    const ostime_t relative_ticks = time - os_getTime();
     const int relative_ms = osticks2ms(relative_ticks > 0 ? relative_ticks : 0);
     job->func = cb;
     job->timer = (void *)mgos_set_timer(relative_ms, /*flags=*/0, os_run_job, job);
+    hal_enableIRQs();
 }
